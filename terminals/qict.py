@@ -91,6 +91,3 @@ def process_excel(input_file,
             progress_callback(percent)
 
     wb.save(output_file)
-
-    if log_callback:
-        log_callback("Finished Successfully")
