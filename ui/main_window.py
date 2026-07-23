@@ -9,8 +9,8 @@ from PySide6.QtWidgets import (
 )
 
 from ui.tracking import TrackingPage
-from ui.schedules import SchedulePage
 from ui.dashboard import DashboardPage
+from ui.msc_schedule import MSCSchedulePage
 
 
 class MainWindow(QMainWindow):
@@ -29,14 +29,14 @@ class MainWindow(QMainWindow):
         self.menu = QListWidget()
 
         self.menu.addItem("🏠 Dashboard")
-        self.menu.addItem("📦 Container Tracking")
-        self.menu.addItem("🚢 Vessel Schedules")
+        self.menu.addItem("📦 QICT Container Tracking")
+        self.menu.addItem("🚢 MSC Schedule Search")
 
         self.stack = QStackedWidget()
 
-        self.stack.addWidget(DashboardPage())
-        self.stack.addWidget(TrackingPage())
-        self.stack.addWidget(SchedulePage())
+        self.stack.addWidget(DashboardPage())      # Index 0
+        self.stack.addWidget(TrackingPage())       # Index 1
+        self.stack.addWidget(MSCSchedulePage())    # Index 2
 
         self.menu.currentRowChanged.connect(self.stack.setCurrentIndex)
 
