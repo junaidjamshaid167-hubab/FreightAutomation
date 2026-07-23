@@ -1,4 +1,5 @@
 import json
+import time
 import requests
 from openpyxl import load_workbook
 
@@ -14,38 +15,52 @@ HEADERS = {
 
 def get_container_info(container_no):
     payload = {
-        "ctrnbr": container_no,
+        "ctrnbr": str(container_no).strip(),
         "UserID": "Test",
         "Password": "Test",
         "Cellno": "123456"
     }
 
-    response = requests.post(
-        API_URL,
-        data=payload,
-        headers=HEADERS,
-        timeout=30
-    )
+    last_error = None
 
-    response.raise_for_status()
+    for attempt in range(3):
+        try:
 
-    data = response.json()
+            response = requests.post(
+                API_URL,
+                data=payload,
+                headers=HEADERS,
+                timeout=30
+            )
 
-    if isinstance(data, str):
-        data = json.loads(data)
+            response.raise_for_status()
 
-    result = {}
+            data = response.json()
 
-    for item in data:
-        result[item["FIELD_NAME"]] = item["FIELD_VALUE"]
+            if isinstance(data, str):
+                data = json.loads(data)
 
-    return result
+            result = {}
+
+            for item in data:
+                result[item["FIELD_NAME"]] = item["FIELD_VALUE"]
+
+            return result
+
+        except requests.RequestException as e:
+            last_error = e
+            time.sleep(1)
+
+    raise last_error
 
 
-def process_excel(input_file,
-                  output_file,
-                  progress_callback=None,
-                  log_callback=None):
+def process_excel(
+    input_file,
+    output_file,
+    progress_callback=None,
+    log_callback=None,
+    stop_callback=None
+):
 
     wb = load_workbook(input_file)
     ws = wb.active
@@ -53,17 +68,35 @@ def process_excel(input_file,
     headers = {}
     next_col = 2
 
-    total = ws.max_row - 1
+    containers = []
 
-    for index, row in enumerate(range(2, ws.max_row + 1), start=1):
+    for row in range(2, ws.max_row + 1):
 
-        container = ws.cell(row=row, column=1).value
+        value = ws.cell(row=row, column=1).value
 
-        if not container:
-            continue
+        if value:
+            containers.append((row, str(value).strip()))
+
+    total = len(containers)
+
+    if total == 0:
 
         if log_callback:
-            log_callback(f"Checking {container}")
+            log_callback("No containers found.")
+
+        return
+
+    for index, (row, container) in enumerate(containers, start=1):
+
+        if stop_callback and stop_callback():
+
+            if log_callback:
+                log_callback("Operation cancelled by user.")
+
+            break
+
+        if log_callback:
+            log_callback(f"[{index}/{total}] Checking {container}")
 
         try:
 
@@ -77,17 +110,29 @@ def process_excel(input_file,
                     ws.cell(row=1, column=next_col).value = field
                     next_col += 1
 
-                ws.cell(row=row,
-                        column=headers[field]).value = value
+                ws.cell(
+                    row=row,
+                    column=headers[field]
+                ).value = value
 
         except Exception as e:
 
             ws.cell(row=row, column=2).value = str(e)
 
+            if log_callback:
+                log_callback(f"ERROR: {container} - {e}")
+
+        percent = int(index / total * 100)
+
         if progress_callback:
-
-            percent = int(index / total * 100)
-
             progress_callback(percent)
 
+        if index % 20 == 0:
+            wb.save(output_file)
+
+        time.sleep(0.2)
+
     wb.save(output_file)
+
+    if log_callback:
+        log_callback("Completed Successfully.")
