@@ -1,10 +1,8 @@
 from datetime import datetime
-from email.mime import text
 import os
 
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import (
-    QGroupBox,
     QWidget,
     QLabel,
     QPushButton,
@@ -14,9 +12,11 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QTextEdit,
     QMessageBox,
+    QGroupBox,
 )
 
 from workers.qict_worker import QICTWorker
+
 
 class TrackingPage(QWidget):
 
@@ -26,17 +26,24 @@ class TrackingPage(QWidget):
         self.input_file = ""
         self.output_file = ""
 
+        self.thread = None
+        self.worker = None
+
+        # ---------------- Main Layout ----------------
         layout = QVBoxLayout()
-        title = QLabel("QICT Container Tracking")
+
+        title = QLabel("🚢 QICT Container Tracking")
+
         title.setStyleSheet("""
-        font-size:24px;
-        font-weight:bold;
-        color:#1565C0;
+            font-size:24px;
+            font-weight:bold;
+            color:#1565C0;
         """)
 
         layout.addWidget(title)
 
-        # ---------- INPUT ----------
+        # ---------------- Input ----------------
+
         input_layout = QHBoxLayout()
 
         self.fileLabel = QLabel("No Excel Selected")
@@ -47,10 +54,13 @@ class TrackingPage(QWidget):
         input_layout.addWidget(self.fileLabel)
         input_layout.addWidget(browse)
 
-        # ---------- OUTPUT ----------
+        # ---------------- Output ----------------
+
         output_layout = QHBoxLayout()
 
-        self.outputLabel = QLabel("Output : output\\container_status.xlsx")
+        self.outputLabel = QLabel(
+            "Output : output\\container_status.xlsx"
+        )
 
         browseOutput = QPushButton("Browse Output")
         browseOutput.clicked.connect(self.select_output)
@@ -58,40 +68,80 @@ class TrackingPage(QWidget):
         output_layout.addWidget(self.outputLabel)
         output_layout.addWidget(browseOutput)
 
-        # ---------- FILES GROUP ----------
+        # ---------------- Files Group ----------------
+
         filesGroup = QGroupBox("Files")
+
         filesLayout = QVBoxLayout()
+
         filesLayout.addLayout(input_layout)
         filesLayout.addLayout(output_layout)
+
         filesGroup.setLayout(filesLayout)
 
-        # ---------- PROGRESS ----------
-        self.progress = QProgressBar()
-        
-        # ---------- STATUS ----------
-        self.statusLabel = QLabel("Ready")
+        layout.addWidget(filesGroup)
 
-        # # ---------- LOG ----------
+        # ---------------- Progress ----------------
+
+        self.progress = QProgressBar()
+        self.progress.setMinimum(0)
+        self.progress.setMaximum(100)
+        self.progress.setValue(0)
+        self.progress.setFormat("%p% Complete")
+        self.progress.setValue(0)
+
+        layout.addWidget(self.progress)
+
+        # ---------------- Status ----------------
+
+        self.statusLabel = QLabel("Status : Ready")
+
+        self.statusLabel.setStyleSheet("""
+        font-weight:bold;
+        color:#1565C0;
+        """)
+
+        layout.addWidget(self.statusLabel)
+
+        # ---------------- Log ----------------
+
         self.log = QTextEdit()
         self.log.setReadOnly(True)
+        self.log.setPlaceholderText(
+        "Container activity will appear here..."
+)
 
-        # ---------- BUTTON ----------
+        self.log.setReadOnly(True)
+
+        layout.addWidget(self.log)
+
+        # ---------------- Buttons ----------------
+
+        buttonLayout = QHBoxLayout()
+
         self.start = QPushButton("START")
         self.start.clicked.connect(self.start_tracking)
 
-        layout.addWidget(filesGroup)
-        layout.addWidget(self.progress)
-        layout.addWidget(self.statusLabel)
-        layout.addWidget(self.log)
-        layout.addWidget(self.start)
+        self.stop = QPushButton("STOP")
+        self.stop.clicked.connect(self.stop_tracking)
+        self.stop.setEnabled(False)
+
+        buttonLayout.addWidget(self.start)
+        buttonLayout.addWidget(self.stop)
+
+        layout.addLayout(buttonLayout)
 
         self.setLayout(layout)
        
+        # --------------------------------------------------
+    # Browse Input Excel
+    # --------------------------------------------------
+
     def browse(self):
 
         file, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Excel",
+            "Select Excel File",
             "",
             "Excel Files (*.xlsx)"
         )
@@ -100,11 +150,15 @@ class TrackingPage(QWidget):
             self.input_file = file
             self.fileLabel.setText(file)
 
+    # --------------------------------------------------
+    # Browse Output Excel
+    # --------------------------------------------------
+
     def select_output(self):
 
         file, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Result",
+            "Save Output File",
             "container_status.xlsx",
             "Excel Files (*.xlsx)"
         )
@@ -113,15 +167,18 @@ class TrackingPage(QWidget):
             self.output_file = file
             self.outputLabel.setText(file)
 
+    # --------------------------------------------------
+    # START
+    # --------------------------------------------------
+
     def start_tracking(self):
-        self.start.setEnabled(False)
 
         if not self.input_file:
 
             QMessageBox.warning(
                 self,
                 "Error",
-                "Please select an Excel file."
+                "Please select an Excel file first."
             )
             return
 
@@ -131,6 +188,14 @@ class TrackingPage(QWidget):
                 os.path.dirname(self.input_file),
                 "container_status.xlsx"
             )
+
+            self.outputLabel.setText(self.output_file)
+
+        self.progress.setValue(0)
+
+        self.log.clear()
+
+        self.statusLabel.setText("Starting...")
 
         self.thread = QThread()
 
@@ -151,6 +216,11 @@ class TrackingPage(QWidget):
 
         self.worker.finished.connect(self.thread.quit)
 
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.start.setEnabled(False)
+        self.stop.setEnabled(True)
+
         self.thread.start()
 
     def add_log(self, text):
@@ -158,13 +228,89 @@ class TrackingPage(QWidget):
         time = datetime.now().strftime("%H:%M:%S")
         self.log.append(f"[{time}] {text}")
 
-    def finished(self):
-        self.start.setEnabled(True)
+    # --------------------------------------------------
+    # STOP
+    # --------------------------------------------------
 
-        self.log.append("Finished Successfully")
+    def stop_tracking(self):
+
+        if self.worker is not None:
+            self.worker.stop()
+
+        self.stop.setEnabled(False)
+
+        self.add_log("Stopping...")
+
+    # --------------------------------------------------
+    # LOG
+    # --------------------------------------------------
+
+    def add_log(self, text):
+
+        self.statusLabel.setText(text)
+
+        current_time = datetime.now().strftime("%H:%M:%S")
+
+        self.log.append(f"[{current_time}] {text}")
+
+    # --------------------------------------------------
+    # FINISHED
+    # --------------------------------------------------
+
+    def finished(self):
+
+        self.progress.setValue(100)
+
+        self.start.setEnabled(True)
+        self.stop.setEnabled(False)
+
+        self.statusLabel.setText("Ready")
+
+        self.add_log("Completed Successfully.")
 
         QMessageBox.information(
             self,
             "Completed",
             "Container Status Saved Successfully!"
+        )
+
+        if self.thread is not None:
+            self.thread.quit()
+            self.thread.wait()
+
+            self.thread = None
+
+        self.worker = None
+
+
+    # --------------------------------------------------
+    # FINISHED
+    # --------------------------------------------------
+
+    def finished(self):
+
+        self.start.setEnabled(True)
+        self.stop.setEnabled(False)
+
+        self.statusLabel.setText("Ready")
+
+        self.add_log("Completed Successfully.")
+
+        self.progress.setValue(100)
+
+        if self.thread is not None:
+
+            self.thread.quit()
+            self.thread.wait()
+
+            self.thread.deleteLater()
+
+            self.thread = None
+
+        self.worker = None
+
+        QMessageBox.information(
+            self,
+            "Completed",
+            f"Container Status Saved Successfully!\n\n{self.output_file}"
         )
