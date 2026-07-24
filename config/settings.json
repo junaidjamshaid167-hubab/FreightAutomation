@@ -1,0 +1,7 @@
+{
+    "theme": "light",
+    "output_folder": "output",
+    "window_width": 1400,
+    "window_height": 900,
+    "default_terminal": "QICT"
+}
