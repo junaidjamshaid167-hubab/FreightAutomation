@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Test / temporary files
+*.log
+*.tmp
+
+# SAPT/QICT temporary HTML responses
+*_history.html
+*_details.html
+
+# Python test cache
+.pytest_cache/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# SAPT debug/response files
+sapt_*.html
